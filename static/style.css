@@ -1,0 +1,158 @@
+:root {
+    --up-color: #e53e3e;
+    --down-color: #38a169;
+}
+
+/* 布局 */
+.container {
+    max-width: 960px;
+    padding-top: 1.5rem;
+}
+
+header hgroup {
+    margin-bottom: 1.5rem;
+}
+
+/* 添加基金区域 */
+.add-fund-section {
+    margin-bottom: 2rem;
+}
+
+.error-msg {
+    color: var(--pico-del-color);
+    margin-top: 0.5rem;
+}
+
+.success-msg {
+    color: var(--pico-ins-color);
+    margin-top: 0.5rem;
+}
+
+/* 基金卡片 */
+.fund-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+.fund-card {
+    margin-bottom: 0;
+}
+
+.fund-card > header {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.fund-name {
+    color: var(--pico-muted-color);
+    font-size: 0.9rem;
+    flex: 1;
+}
+
+.delete-btn {
+    margin-left: auto;
+}
+
+/* 基金统计 */
+.fund-stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+    gap: 0.75rem;
+    margin-bottom: 0.75rem;
+}
+
+.stat {
+    text-align: center;
+}
+
+.stat small {
+    display: block;
+    color: var(--pico-muted-color);
+    font-size: 0.8rem;
+}
+
+.stat strong {
+    font-size: 1.15rem;
+}
+
+.up {
+    color: var(--up-color);
+}
+
+.down {
+    color: var(--down-color);
+}
+
+/* 加仓面板 */
+.positions-panel {
+    margin-top: 1rem;
+    padding-top: 1rem;
+    border-top: 1px solid var(--pico-muted-border-color);
+}
+
+.positions-panel h4 {
+    margin-bottom: 0.75rem;
+}
+
+.positions-table {
+    font-size: 0.9rem;
+}
+
+.positions-table th,
+.positions-table td {
+    padding: 0.4rem 0.6rem;
+}
+
+.summary-bar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1rem;
+    padding: 0.75rem;
+    margin: 1rem 0;
+    background: var(--pico-card-sectioning-background-color);
+    border-radius: var(--pico-border-radius);
+    font-size: 0.9rem;
+}
+
+.position-form {
+    margin-top: 0.75rem;
+}
+
+.position-form fieldset {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr auto;
+    gap: 0.5rem;
+}
+
+/* 空状态 */
+.empty-state {
+    text-align: center;
+    padding: 3rem;
+    color: var(--pico-muted-color);
+}
+
+/* 底部 */
+.app-footer {
+    text-align: center;
+    margin-top: 2rem;
+    padding: 1rem 0;
+    color: var(--pico-muted-color);
+}
+
+/* 响应式 */
+@media (max-width: 640px) {
+    .fund-stats {
+        grid-template-columns: repeat(2, 1fr);
+    }
+
+    .position-form fieldset {
+        grid-template-columns: 1fr 1fr;
+    }
+
+    .summary-bar {
+        flex-direction: column;
+        gap: 0.5rem;
+    }
+}
