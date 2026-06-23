@@ -23,7 +23,16 @@ window.fundApp = () => ({
         try {
             const resp = await fetch("/api/funds");
             if (resp.ok) {
-                this.funds = await resp.json();
+                const currentValuations = Object.fromEntries(
+                    this.funds
+                        .filter((fund) => fund.valuation)
+                        .map((fund) => [fund.fund_code, fund.valuation])
+                );
+                const funds = await resp.json();
+                this.funds = funds.map((fund) => ({
+                    ...fund,
+                    valuation: fund.valuation || currentValuations[fund.fund_code] || null,
+                }));
             }
         } catch (e) {
             console.error("加载基金列表失败", e);
@@ -104,13 +113,45 @@ window.fundApp = () => ({
         this.posData = null;
         this.posAmount = "";
         this.posNote = "";
+        await this.refreshPositions(code);
+    },
+
+    async refreshPositions(code) {
         try {
             const resp = await fetch(`/api/funds/${code}/positions`);
             if (resp.ok) {
-                this.posData = await resp.json();
+                const data = await resp.json();
+                this.posData = data;
+                this.updateFundFromPositionData(data);
             }
         } catch (e) {
             console.error("加载加仓记录失败", e);
+        }
+    },
+
+    updateFundFromPositionData(data) {
+        const fund = this.funds.find((item) => item.fund_code === data.fund_code);
+        if (!fund) return;
+
+        fund.positions = data.positions || [];
+        fund.nav = data.nav;
+        fund.nav_date = data.nav_date;
+        fund.total_invested = data.total_invested || 0;
+        fund.total_shares = data.total_shares || 0;
+        fund.current_value = data.current_value || 0;
+        fund.profit = data.profit || 0;
+        fund.profit_pct = fund.total_invested > 0 ? (fund.profit / fund.total_invested) * 100 : 0;
+
+        const positions = fund.positions;
+        if (positions.length && data.nav) {
+            const lastPos = [...positions].sort((a, b) => a.date.localeCompare(b.date)).at(-1);
+            fund.last_nav = lastPos?.nav || null;
+            fund.nav_change_since_last = fund.last_nav
+                ? ((data.nav - fund.last_nav) / fund.last_nav) * 100
+                : null;
+        } else {
+            fund.last_nav = null;
+            fund.nav_change_since_last = null;
         }
     },
 
@@ -129,8 +170,7 @@ window.fundApp = () => ({
             if (resp.ok) {
                 this.posAmount = "";
                 this.posNote = "";
-                await this.loadFunds();
-                await this.openPositions(code);
+                await this.refreshPositions(code);
             } else {
                 this.error = data.error || "添加加仓失败";
             }
@@ -146,8 +186,7 @@ window.fundApp = () => ({
         try {
             const resp = await fetch(`/api/funds/${code}/positions/${pid}`, { method: "DELETE" });
             if (resp.ok) {
-                await this.loadFunds();
-                await this.openPositions(code);
+                await this.refreshPositions(code);
             }
         } catch (e) {
             console.error("删除失败", e);
