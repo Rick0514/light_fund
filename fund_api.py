@@ -16,8 +16,11 @@ def _http_get(url: str, referer: str = "", timeout: int = 10) -> str:
     cmd.append(url)
 
     try:
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout + 2)
-        return result.stdout
+        result = subprocess.run(cmd, capture_output=True, timeout=timeout + 2)
+        try:
+            return result.stdout.decode("utf-8")
+        except UnicodeDecodeError:
+            return result.stdout.decode("gb18030", errors="replace")
     except Exception as e:
         raise OSError(f"curl 请求失败: {e}")
 
