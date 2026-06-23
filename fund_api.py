@@ -3,15 +3,13 @@ from __future__ import annotations
 import json
 import re
 import subprocess
-from datetime import datetime, date
+from datetime import datetime, date, timedelta
 from typing import Optional
 
-# 基金名称缓存
 FUND_NAME_CACHE: dict[str, str] = {}
 
 
 def _http_get(url: str, referer: str = "", timeout: int = 10) -> str:
-    """通过 curl 发起 HTTP GET 请求，返回响应内容"""
     cmd = ["curl", "-s", "--max-time", str(timeout)]
     if referer:
         cmd += ["-H", f"Referer: {referer}"]
@@ -25,7 +23,6 @@ def _http_get(url: str, referer: str = "", timeout: int = 10) -> str:
 
 
 def _get_fund_name(fund_code: str) -> str:
-    """从基金详情页 title 获取基金名称（带缓存）"""
     if fund_code in FUND_NAME_CACHE:
         return FUND_NAME_CACHE[fund_code]
 
@@ -46,31 +43,12 @@ def _get_fund_name(fund_code: str) -> str:
     return name
 
 
-def get_fund_info(fund_code: str, target_date: str = "") -> Optional[dict]:
-    """
-    获取中国公募基金在指定日期的净值信息。
-
-    Args:
-        fund_code: 基金代码（如 "110003"）
-        target_date: 日期 YYYY-MM-DD，空字符串表示最新交易日
-
-    Returns:
-        dict: {fund_code, name, date, nav, acc_nav, daily_return} 或 None
-    """
-    today = date.today().isoformat()
-    if not target_date:
-        target_date = today
-
-    # 校验日期格式
-    try:
-        datetime.strptime(target_date, "%Y-%m-%d")
-    except ValueError:
-        raise ValueError(f"日期格式错误: {target_date}，应为 YYYY-MM-DD")
-
+def _query_fund_nav(fund_code: str, start_date: str, end_date: str) -> Optional[dict]:
+    """查询基金在日期范围内的净值数据，返回第一条记录"""
     url = (
         f"https://api.fund.eastmoney.com/f10/lsjz"
         f"?fundCode={fund_code}&pageIndex=1&pageSize=5"
-        f"&startDate={target_date}&endDate={target_date}"
+        f"&startDate={start_date}&endDate={end_date}"
     )
 
     try:
@@ -79,7 +57,10 @@ def get_fund_info(fund_code: str, target_date: str = "") -> Optional[dict]:
         print(f"请求失败: {e}")
         return None
 
-    data = json.loads(content)
+    try:
+        data = json.loads(content)
+    except json.JSONDecodeError:
+        return None
 
     if data.get("ErrCode") != 0:
         return None
@@ -88,20 +69,63 @@ def get_fund_info(fund_code: str, target_date: str = "") -> Optional[dict]:
     if not records:
         return None
 
-    # 取日期匹配的第一条记录
-    target = None
-    for r in records:
-        if r.get("FSRQ") == target_date:
-            target = r
-            break
-    if target is None:
-        target = records[0]
+    # 取日期最新的记录
+    records.sort(key=lambda r: r.get("FSRQ", ""), reverse=True)
+    latest = records[0]
 
     return {
         "fund_code": fund_code,
         "name": _get_fund_name(fund_code),
-        "date": target["FSRQ"],
-        "nav": float(target["DWJZ"]),
-        "acc_nav": float(target["LJJZ"]),
-        "daily_return": float(target.get("JZZZL", "0")) / 100 if target.get("JZZZL") else 0.0,
+        "date": latest["FSRQ"],
+        "nav": float(latest["DWJZ"]),
+        "acc_nav": float(latest["LJJZ"]),
+        "daily_return": float(latest.get("JZZZL", "0")) / 100 if latest.get("JZZZL") else 0.0,
     }
+
+
+def get_fund_info(fund_code: str, target_date: str = "") -> Optional[dict]:
+    """
+    获取基金在指定日期（或最近交易日）的净值信息。
+
+    Args:
+        fund_code: 基金代码
+        target_date: 日期 YYYY-MM-DD，空字符串表示最新交易日
+
+    Returns:
+        dict 或 None
+    """
+    today = date.today().isoformat()
+    if not target_date:
+        target_date = today
+
+    # 校验格式
+    try:
+        datetime.strptime(target_date, "%Y-%m-%d")
+    except ValueError:
+        raise ValueError(f"日期格式错误: {target_date}，应为 YYYY-MM-DD")
+
+    # 查最近 10 天内最新净值（指定日期往前10天）
+    dt = datetime.strptime(target_date, "%Y-%m-%d")
+    start = (dt - timedelta(days=10)).strftime("%Y-%m-%d")
+    result = _query_fund_nav(fund_code, start, target_date)
+    if result:
+        return result
+
+    # 放宽到最近 30 天
+    start = (dt - timedelta(days=30)).strftime("%Y-%m-%d")
+    result = _query_fund_nav(fund_code, start, target_date)
+    return result
+
+    # 如果当天没数据（非交易日），往前回退最多 10 天查最近交易日
+    dt = datetime.strptime(target_date, "%Y-%m-%d")
+    for _ in range(10):
+        dt -= timedelta(days=1)
+        prev = dt.strftime("%Y-%m-%d")
+        result = _query_fund_nav(fund_code, prev, prev)
+        if result:
+            return result
+
+    # 放宽到最近 30 天
+    fallback_start = (datetime.strptime(target_date, "%Y-%m-%d") - timedelta(days=30)).strftime("%Y-%m-%d")
+    result = _query_fund_nav(fund_code, fallback_start, target_date)
+    return result

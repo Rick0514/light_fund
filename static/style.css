@@ -3,7 +3,6 @@
     --down-color: #38a169;
 }
 
-/* 布局 */
 .container {
     max-width: 960px;
     padding-top: 1.5rem;
@@ -13,9 +12,15 @@ header hgroup {
     margin-bottom: 1.5rem;
 }
 
-/* 添加基金区域 */
+/* 添加基金 */
 .add-fund-section {
     margin-bottom: 2rem;
+}
+
+#add-fund-form button {
+    flex: 0 0 auto;
+    width: auto;
+    margin-bottom: 0;
 }
 
 .error-msg {
@@ -58,7 +63,7 @@ header hgroup {
 /* 基金统计 */
 .fund-stats {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+    grid-template-columns: repeat(7, 1fr);
     gap: 0.75rem;
     margin-bottom: 0.75rem;
 }
@@ -68,12 +73,14 @@ header hgroup {
 }
 
 .stat small {
+    font-size: 0.7rem;
     display: block;
     color: var(--pico-muted-color);
     font-size: 0.8rem;
 }
 
 .stat strong {
+    font-size: 0.95rem;
     font-size: 1.15rem;
 }
 
@@ -98,13 +105,16 @@ header hgroup {
 
 .positions-table {
     font-size: 0.9rem;
+    width: 100%;
 }
 
 .positions-table th,
 .positions-table td {
     padding: 0.4rem 0.6rem;
+    white-space: nowrap;
 }
 
+/* 持仓汇总 */
 .summary-bar {
     display: flex;
     flex-wrap: wrap;
@@ -116,14 +126,22 @@ header hgroup {
     font-size: 0.9rem;
 }
 
+/* 添加加仓表单 */
 .position-form {
     margin-top: 0.75rem;
-}
-
-.position-form fieldset {
     display: grid;
     grid-template-columns: 1fr 1fr 1fr auto;
     gap: 0.5rem;
+    align-items: end;
+}
+
+.position-form input,
+.position-form button {
+    margin-bottom: 0;
+}
+
+.muted {
+    color: var(--pico-muted-color);
 }
 
 /* 空状态 */
@@ -147,7 +165,7 @@ header hgroup {
         grid-template-columns: repeat(2, 1fr);
     }
 
-    .position-form fieldset {
+    .position-form {
         grid-template-columns: 1fr 1fr;
     }
 

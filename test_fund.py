@@ -7,9 +7,9 @@ from fund_api import get_fund_info
 
 def test_get_fund_info():
     """测试 get_fund_info 函数"""
-    # test_code = "016874"
-    test_code = "017076"
-    test_date = "2026-06-16"
+    test_code = "016874"
+    # test_code = "017076"
+    test_date = "2026-06-19"
 
     print("=" * 50)
     print(f"测试 1: 正常查询（代码 {test_code}，日期 {test_date}）")

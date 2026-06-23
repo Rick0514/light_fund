@@ -4,162 +4,148 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>基金持仓管理</title>
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css">
+    <link rel="stylesheet" href="/static/pico.min.css">
     <link rel="stylesheet" href="/static/style.css">
-    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3/dist/cdn.min.js"></script>
     <script defer src="/static/app.js"></script>
+    <script defer src="/static/alpine.min.js"></script>
 </head>
-<body x-data="fundApp()" x-init="init()">
-    <main class="container">
+<body>
+    <main class="container" x-data="fundApp()" x-init="init()">
         <header>
             <hgroup>
                 <h1>📊 基金持仓管理</h1>
-                <p>自选基金 · 加仓记录 · 盈亏追踪</p>
+                <p>自选基金 · 净值追踪</p>
             </hgroup>
         </header>
 
-        <!-- 添加自选基金 -->
         <section class="add-fund-section">
-            <form @submit.prevent="addFund()">
+            <form id="add-fund-form" @submit.prevent="addFund()">
                 <fieldset role="group">
-                    <input
-                        type="text"
-                        x-model="newFundCode"
-                        placeholder="输入基金代码，如 110003"
-                        :disabled="loading"
-                        required
-                    >
+                    <input type="text" x-model="newFundCode" placeholder="输入基金代码，如 110003" :disabled="loading" required>
                     <button type="submit" :aria-busy="loading">
                         <span x-show="!loading">+ 添加自选</span>
                         <span x-show="loading">加载中...</span>
                     </button>
                 </fieldset>
             </form>
-            <p x-show="error" class="error-msg" x-text="error"></p>
-            <p x-show="successMsg" class="success-msg" x-text="successMsg"></p>
+            <template x-if="error"><p class="error-msg" x-text="error"></p></template>
+            <template x-if="successMsg"><p class="success-msg" x-text="successMsg"></p></template>
         </section>
 
-        <!-- 基金列表 -->
-        <section x-show="funds.length > 0 || loadingFunds">
-            <h2>自选基金列表</h2>
-            <div class="fund-grid">
-                <template x-for="fund in funds" :key="fund.fund_code">
-                    <article class="fund-card">
-                        <header>
-                            <strong x-text="fund.fund_code"></strong>
-                            <span class="fund-name" x-text="fund.name"></span>
-                            <button
-                                class="outline secondary small delete-btn"
-                                @click="deleteFund(fund.fund_code)"
-                            >删除</button>
-                        </header>
-                        <div class="fund-stats">
-                            <div class="stat">
-                                <small>单位净值</small>
-                                <strong x-text="fund.nav?.toFixed(4) || '--'"></strong>
-                            </div>
-                            <div class="stat">
-                                <small>日涨跌</small>
-                                <strong
-                                    :class="fund.daily_return >= 0 ? 'up' : 'down'"
-                                    x-text="fmtPct(fund.daily_return)"
-                                ></strong>
-                            </div>
-                            <div class="stat">
-                                <small>累计投入</small>
-                                <strong x-text="'¥' + fmtNum(fund.total_invested)"></strong>
-                            </div>
-                            <div class="stat">
-                                <small>当前市值</small>
-                                <strong x-text="'¥' + fmtNum(fund.current_value)"></strong>
-                            </div>
-                            <div class="stat">
-                                <small>持仓盈亏</small>
-                                <strong
-                                    :class="fund.profit >= 0 ? 'up' : 'down'"
-                                    x-text="fmtProfit(fund.profit, fund.profit_pct)"
-                                ></strong>
-                            </div>
-                        </div>
-                        <footer>
-                            <button
-                                class="outline small"
-                                @click="toggleDetail(fund.fund_code)"
-                                x-text="detailCode === fund.fund_code ? '收起详情 ▲' : '查看详情 ▼'"
-                            ></button>
-                        </footer>
+        <template x-if="funds.length > 0">
+            <section>
+                <h2>自选基金列表</h2>
+                <div class="fund-grid">
+                    <template x-for="fund in funds" :key="fund.fund_code">
+                        <article class="fund-card">
+                            <header>
+                                <strong x-text="fund.fund_code"></strong>
+                                <span class="fund-name" x-text="fund.name"></span>
+                                <button class="outline secondary small delete-btn" @click="deleteFund(fund.fund_code)">删除</button>
+                            </header>
 
-                        <!-- 加仓详情 -->
-                        <div x-show="detailCode === fund.fund_code" class="positions-panel">
-                            <h4>加仓记录</h4>
-                            <template x-if="detailData && detailData.positions.length > 0">
-                                <table class="positions-table">
-                                    <thead>
-                                        <tr>
-                                            <th>日期</th>
-                                            <th>金额</th>
-                                            <th>净值</th>
-                                            <th>份额</th>
-                                            <th>备注</th>
-                                            <th></th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        <template x-for="p in detailData.positions" :key="p.id">
-                                            <tr>
-                                                <td x-text="p.date"></td>
-                                                <td x-text="'¥' + fmtNum(p.amount)"></td>
-                                                <td x-text="p.nav?.toFixed(4)"></td>
-                                                <td x-text="p.shares?.toFixed(2)"></td>
-                                                <td x-text="p.note || '--'"></td>
-                                                <td>
-                                                    <button
-                                                        class="outline secondary small"
-                                                        @click="deletePosition(fund.fund_code, p.id)"
-                                                    >删</button>
-                                                </td>
-                                            </tr>
-                                        </template>
-                                    </tbody>
-                                </table>
+                            <div class="fund-stats">
+                                <div class="stat">
+                                    <small>单位净值</small>
+                                    <strong x-text="fund.nav?.toFixed(4) || '--'"></strong>
+                                </div>
+                                <div class="stat">
+                                    <small>日涨跌</small>
+                                    <strong :class="fund.daily_return >= 0 ? 'up' : 'down'" x-text="fmtPct(fund.daily_return)"></strong>
+                                </div>
+                                <div class="stat">
+                                    <small>净值日期</small>
+                                    <strong x-text="fund.nav_date || '--'"></strong>
+                                </div>
+                                <div class="stat">
+                                    <small>累计投入</small>
+                                    <strong x-text="'¥' + fmtNum(fund.total_invested || 0)"></strong>
+                                </div>
+                                <div class="stat">
+                                    <small>当前市值</small>
+                                    <strong x-text="'¥' + fmtNum(fund.current_value || 0)"></strong>
+                                </div>
+                                <div class="stat">
+                                    <small>距上次加仓</small>
+                                    <strong :class="(fund.nav_change_since_last || 0) >= 0 ? 'up' : 'down'" x-text="fmtNavChange(fund.nav_change_since_last)"></strong>
+                                </div>
+                                <div class="stat">
+                                    <small>持仓盈亏</small>
+                                    <strong :class="(fund.profit || 0) >= 0 ? 'up' : 'down'" x-text="fmtProfit(fund.profit, fund.profit_pct)"></strong>
+                                </div>
+                            </div>
+
+                            <footer>
+                                <button class="outline small"
+                                    @click="showPosCode === fund.fund_code ? (showPosCode = null) : openPositions(fund.fund_code)"
+                                    x-text="showPosCode === fund.fund_code ? '收起加仓 ▲' : '加仓信息 ▼'">
+                                </button>
+                            </footer>
+
+                            <template x-if="showPosCode === fund.fund_code">
+                                <div class="positions-panel">
+                                    <h4>加仓记录</h4>
+                                    <template x-if="posData && posData.positions.length > 0">
+                                        <table class="positions-table">
+                                            <thead>
+                                                <tr>
+                                                    <th>日期</th>
+                                                    <th>金额</th>
+                                                    <th>净值</th>
+                                                    <th>份额</th>
+                                                    <th>备注</th>
+                                                    <th></th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                <template x-for="p in posData.positions" :key="p.id">
+                                                    <tr>
+                                                        <td x-text="p.date"></td>
+                                                        <td x-text="'¥' + fmtNum(p.amount)"></td>
+                                                        <td x-text="p.nav?.toFixed(4)"></td>
+                                                        <td x-text="p.shares?.toFixed(2)"></td>
+                                                        <td x-text="p.note || '--'"></td>
+                                                        <td>
+                                                            <button class="outline secondary small" @click="deletePosition(fund.fund_code, p.id)">删</button>
+                                                        </td>
+                                                    </tr>
+                                                </template>
+                                            </tbody>
+                                        </table>
+                                    </template>
+                                    <template x-if="!posData || posData.positions.length === 0">
+                                        <p class="muted">暂无加仓记录</p>
+                                    </template>
+
+                                    <template x-if="posData">
+                                        <div class="summary-bar">
+                                            <span>累计投入: <strong>¥<span x-text="fmtNum(posData.total_invested)"></span></strong></span>
+                                            <span>累计份额: <strong x-text="posData.total_shares?.toFixed(2)"></strong></span>
+                                            <span>当前市值: <strong>¥<span x-text="fmtNum(posData.current_value)"></span></strong></span>
+                                            <span>盈亏: <strong :class="(posData.profit || 0) >= 0 ? 'up' : 'down'" x-text="'¥' + fmtNum(posData.profit)"></strong></span>
+                                        </div>
+                                    </template>
+
+                                    <h4>添加加仓</h4>
+                                    <form @submit.prevent="addPosition(fund.fund_code)" class="position-form">
+                                        <input type="date" x-model="posDate" required>
+                                        <input type="number" x-model="posAmount" placeholder="金额（元）" step="0.01" min="0.01" required>
+                                        <input type="text" x-model="posNote" placeholder="备注（可选）">
+                                        <button type="submit" :aria-busy="posLoading">添加</button>
+                                    </form>
+                                </div>
                             </template>
-                            <p x-show="!detailData || detailData.positions.length === 0" class="muted">
-                                暂无加仓记录
-                            </p>
+                        </article>
+                    </template>
+                </div>
+            </section>
+        </template>
 
-                            <!-- 汇总 -->
-                            <div class="summary-bar" x-show="detailData">
-                                <span>累计投入: <strong>¥<span x-text="fmtNum(detailData.total_invested)"></span></strong></span>
-                                <span>累计份额: <strong x-text="detailData.total_shares?.toFixed(2)"></strong></span>
-                                <span>当前市值: <strong>¥<span x-text="fmtNum(detailData.current_value)"></span></strong></span>
-                                <span>盈亏:
-                                    <strong
-                                        :class="detailData.profit >= 0 ? 'up' : 'down'"
-                                        x-text="'¥' + fmtNum(detailData.profit)"
-                                    ></strong>
-                                </span>
-                            </div>
-
-                            <!-- 添加加仓 -->
-                            <h4>添加加仓</h4>
-                            <form @submit.prevent="addPosition(fund.fund_code)" class="position-form">
-                                <fieldset role="group">
-                                    <input type="date" x-model="posDate" required>
-                                    <input type="number" x-model="posAmount" placeholder="金额（元）" step="0.01" min="0.01" required>
-                                    <input type="text" x-model="posNote" placeholder="备注（可选）">
-                                    <button type="submit" :aria-busy="posLoading">添加</button>
-                                </fieldset>
-                            </form>
-                        </div>
-                    </article>
-                </template>
-            </div>
-        </section>
-
-        <!-- 空状态 -->
-        <section x-show="funds.length === 0 && !loadingFunds && !error" class="empty-state">
-            <p>👋 还没有自选基金，在上方输入基金代码开始添加。</p>
-        </section>
+        <template x-if="funds.length === 0 && !loadingFunds">
+            <section class="empty-state">
+                <p>👋 还没有自选基金，在上方输入基金代码开始添加。</p>
+            </section>
+        </template>
 
         <footer class="app-footer">
             <small>数据来源：东方财富 · 仅供参考</small>

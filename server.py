@@ -109,11 +109,24 @@ class FundHandler(BaseHTTPRequestHandler):
                     entry["current_value"] = round(total_shares * fund_info["nav"], 2)
                     entry["profit"] = round(entry["current_value"] - total_invested, 2)
                     entry["profit_pct"] = round(entry["profit"] / total_invested * 100, 2) if total_invested > 0 else 0
+                    # 距离上次加仓的净值涨跌
+                    positions_list = info.get("positions", [])
+                    if positions_list:
+                        last_pos = sorted(positions_list, key=lambda p: p["date"])[-1]
+                        if last_pos.get("nav") and last_pos["nav"] > 0:
+                            entry["last_nav"] = last_pos["nav"]
+                            entry["nav_change_since_last"] = round((fund_info["nav"] - last_pos["nav"]) / last_pos["nav"] * 100, 2)
+                        else:
+                            entry["last_nav"] = None
+                            entry["nav_change_since_last"] = None
+                    else:
+                        entry["last_nav"] = None
+                        entry["nav_change_since_last"] = None
                 result.append(entry)
             return self._send_json(result)
 
         # GET /api/funds/<code>/positions - 某基金加仓记录
-        if len(parts) == 4 and parts[1] == "api" and parts[2] == "funds" and parts[4] == "positions":
+        if len(parts) == 5 and parts[1] == "api" and parts[2] == "funds" and parts[4] == "positions":
             code = parts[3]
             data = load_data()
             if code not in data["funds"]:
@@ -172,7 +185,7 @@ class FundHandler(BaseHTTPRequestHandler):
             }, 201)
 
         # POST /api/funds/<code>/positions - 添加加仓记录
-        if len(parts) == 4 and parts[1] == "api" and parts[2] == "funds" and parts[4] == "positions":
+        if len(parts) == 5 and parts[1] == "api" and parts[2] == "funds" and parts[4] == "positions":
             code = parts[3]
             body = self._read_body()
             pos_date = body.get("date", "").strip()
