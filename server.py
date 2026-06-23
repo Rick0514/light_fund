@@ -7,7 +7,7 @@ from http.server import HTTPServer, BaseHTTPRequestHandler
 from urllib.parse import urlparse, parse_qs
 from pathlib import Path
 
-from fund_api import get_fund_info
+from fund_api import get_fund_info, get_fund_valuation
 
 DATA_DIR = Path(__file__).parent / "data"
 DATA_FILE = DATA_DIR / "funds.json"
@@ -15,7 +15,6 @@ STATIC_DIR = Path(__file__).parent / "static"
 
 
 def load_data() -> dict:
-    """加载持久化数据"""
     if DATA_FILE.exists():
         with open(DATA_FILE, "r", encoding="utf-8") as f:
             return json.load(f)
@@ -23,14 +22,12 @@ def load_data() -> dict:
 
 
 def save_data(data: dict) -> None:
-    """保存数据到 JSON 文件"""
     DATA_DIR.mkdir(parents=True, exist_ok=True)
     with open(DATA_FILE, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
 
 
 class FundHandler(BaseHTTPRequestHandler):
-    """HTTP 请求处理器"""
 
     def _send_json(self, data, status=200):
         body = json.dumps(data, ensure_ascii=False).encode("utf-8")
@@ -75,7 +72,6 @@ class FundHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         path, parsed = self._parse_path()
 
-        # 静态文件
         if path == "" or path == "/":
             return self._send_file(STATIC_DIR / "index.html", "text/html; charset=utf-8")
         if path.startswith("/static/"):
@@ -85,7 +81,20 @@ class FundHandler(BaseHTTPRequestHandler):
 
         parts = path.split("/")
 
-        # GET /api/funds - 自选基金列表（含实时净值）
+        # GET /api/valuations - 批量刷新实时估值
+        if path == "/api/valuations":
+            data = load_data()
+            result = {}
+            for code in data["funds"]:
+                try:
+                    val = get_fund_valuation(code)
+                    if val and "error" not in val:
+                        result[code] = val
+                except Exception:
+                    pass
+            return self._send_json(result)
+
+        # GET /api/funds - 自选基金列表
         if path == "/api/funds":
             data = load_data()
             result = []
@@ -101,7 +110,6 @@ class FundHandler(BaseHTTPRequestHandler):
                     entry["nav"] = fund_info["nav"]
                     entry["daily_return"] = fund_info["daily_return"]
                     entry["nav_date"] = fund_info["date"]
-                    # 计算持仓汇总
                     total_invested = sum(p["amount"] for p in info.get("positions", []))
                     total_shares = sum(p["shares"] for p in info.get("positions", []))
                     entry["total_invested"] = round(total_invested, 2)
@@ -109,7 +117,6 @@ class FundHandler(BaseHTTPRequestHandler):
                     entry["current_value"] = round(total_shares * fund_info["nav"], 2)
                     entry["profit"] = round(entry["current_value"] - total_invested, 2)
                     entry["profit_pct"] = round(entry["profit"] / total_invested * 100, 2) if total_invested > 0 else 0
-                    # 距离上次加仓的净值涨跌
                     positions_list = info.get("positions", [])
                     if positions_list:
                         last_pos = sorted(positions_list, key=lambda p: p["date"])[-1]
@@ -122,10 +129,11 @@ class FundHandler(BaseHTTPRequestHandler):
                     else:
                         entry["last_nav"] = None
                         entry["nav_change_since_last"] = None
+                entry["valuation"] = None
                 result.append(entry)
             return self._send_json(result)
 
-        # GET /api/funds/<code>/positions - 某基金加仓记录
+        # GET /api/funds/<code>/positions
         if len(parts) == 5 and parts[1] == "api" and parts[2] == "funds" and parts[4] == "positions":
             code = parts[3]
             data = load_data()
@@ -156,21 +164,17 @@ class FundHandler(BaseHTTPRequestHandler):
         path, _ = self._parse_path()
         parts = path.split("/")
 
-        # POST /api/funds - 添加自选基金
         if path == "/api/funds":
             body = self._read_body()
             fund_code = body.get("fund_code", "").strip()
             if not fund_code:
                 return self._send_json({"error": "基金代码不能为空"}, 400)
-
             data = load_data()
             if fund_code in data["funds"]:
                 return self._send_json({"error": "该基金已在自选列表中"}, 400)
-
             fund_info = get_fund_info(fund_code)
             if not fund_info:
                 return self._send_json({"error": f"无法获取基金 {fund_code} 的信息"}, 400)
-
             data["funds"][fund_code] = {
                 "name": fund_info["name"],
                 "added_at": fund_info["date"],
@@ -184,29 +188,22 @@ class FundHandler(BaseHTTPRequestHandler):
                 "daily_return": fund_info["daily_return"],
             }, 201)
 
-        # POST /api/funds/<code>/positions - 添加加仓记录
         if len(parts) == 5 and parts[1] == "api" and parts[2] == "funds" and parts[4] == "positions":
             code = parts[3]
             body = self._read_body()
             pos_date = body.get("date", "").strip()
             amount = body.get("amount", 0)
             note = body.get("note", "").strip()
-
             if not pos_date or amount <= 0:
                 return self._send_json({"error": "日期和金额不能为空"}, 400)
-
             data = load_data()
             if code not in data["funds"]:
                 return self._send_json({"error": "基金不存在"}, 404)
-
-            # 获取该日期的净值
             fund_info = get_fund_info(code, pos_date)
             if not fund_info:
                 return self._send_json({"error": f"无法获取 {code} 在 {pos_date} 的净值"}, 400)
-
             nav = fund_info["nav"]
             shares = round(amount / nav, 4) if nav > 0 else 0
-
             position = {
                 "id": uuid.uuid4().hex[:8],
                 "date": pos_date,
@@ -225,7 +222,6 @@ class FundHandler(BaseHTTPRequestHandler):
         path, _ = self._parse_path()
         parts = path.split("/")
 
-        # DELETE /api/funds/<code> - 删除自选基金
         if len(parts) == 4 and parts[1] == "api" and parts[2] == "funds":
             code = parts[3]
             data = load_data()
@@ -235,7 +231,6 @@ class FundHandler(BaseHTTPRequestHandler):
             save_data(data)
             return self._send_json({"ok": True})
 
-        # DELETE /api/funds/<code>/positions/<id> - 删除加仓记录
         if len(parts) == 6 and parts[1] == "api" and parts[2] == "funds" and parts[4] == "positions":
             code, pid = parts[3], parts[5]
             data = load_data()

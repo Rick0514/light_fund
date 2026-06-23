@@ -11,6 +11,8 @@ window.fundApp = () => ({
     posAmount: "",
     posNote: "",
     posLoading: false,
+    refreshing: false,
+    valTime: "",
 
     async init() {
         await this.loadFunds();
@@ -27,6 +29,31 @@ window.fundApp = () => ({
             console.error("加载基金列表失败", e);
         } finally {
             this.loadingFunds = false;
+        }
+    },
+
+    async refreshValuation() {
+        this.refreshing = true;
+        try {
+            const resp = await fetch("/api/valuations");
+            if (resp.ok) {
+                const vals = await resp.json();
+                for (const f of this.funds) {
+                    if (vals[f.fund_code]) {
+                        f.valuation = {
+                            gsz: vals[f.fund_code].gsz,
+                            gszzl: vals[f.fund_code].gszzl,
+                            gztime: vals[f.fund_code].gztime,
+                        };
+                    }
+                }
+                const now = new Date();
+                this.valTime = now.toLocaleTimeString("zh-CN");
+            }
+        } catch (e) {
+            console.error("刷新估值失败", e);
+        } finally {
+            this.refreshing = false;
         }
     },
 
@@ -90,7 +117,6 @@ window.fundApp = () => ({
     async addPosition(code) {
         const amount = parseFloat(this.posAmount);
         if (!this.posDate || isNaN(amount) || amount <= 0) return;
-
         this.posLoading = true;
         this.error = "";
         try {
@@ -126,6 +152,19 @@ window.fundApp = () => ({
         } catch (e) {
             console.error("删除失败", e);
         }
+    },
+
+    valuationCls(val) {
+        if (val == null || val === "") return "";
+        const n = parseFloat(val);
+        return n >= 0 ? "up" : "down";
+    },
+
+    fmtValPct(val) {
+        if (val == null || val === "") return "--";
+        const n = parseFloat(val);
+        const prefix = n >= 0 ? "+" : "";
+        return prefix + n.toFixed(2) + "%";
     },
 
     fmtPct(val) {

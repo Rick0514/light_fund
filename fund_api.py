@@ -129,3 +129,58 @@ def get_fund_info(fund_code: str, target_date: str = "") -> Optional[dict]:
     fallback_start = (datetime.strptime(target_date, "%Y-%m-%d") - timedelta(days=30)).strftime("%Y-%m-%d")
     result = _query_fund_nav(fund_code, fallback_start, target_date)
     return result
+
+
+def get_fund_valuation(code: str) -> dict:
+    """
+    获取单只基金的实时估值和涨跌幅。
+
+    参数：
+        code: 基金代码，如 "000001"
+
+    返回：
+        dict，包含：
+            - code:      基金代码
+            - name:      基金名称
+            - dwjz:      最新单位净值（通常为前一交易日）
+            - gsz:       实时估算净值
+            - gszzl:     估算涨跌幅（%）
+            - gztime:    估值时间
+            - jzrq:      净值日期
+
+        若获取失败返回 {"code": code, "error": "..."}
+    """
+    # 1. 东方财富基金估值接口（JSONP 格式）
+    ts = int(datetime.now().timestamp() * 1000)
+    url = f"https://fundgz.1234567.com.cn/js/{code}.js?rt={ts}"
+    referer = "https://fundgz.1234567.com.cn/"
+
+    try:
+        raw = _http_get(url, referer=referer, timeout=10)
+    except OSError as e:
+        return {"code": code, "error": str(e)}
+
+    if not raw or "jsonpgz" not in raw:
+        return {"code": code, "error": f"估值接口未返回有效数据，原始响应: {raw[:200]}"}
+
+    # 剥掉 jsonpgz(...) 的外壳
+    json_str = re.sub(r'^jsonpgz\(', '', raw)
+    json_str = re.sub(r'\);?\s*$', '', json_str)
+
+    try:
+        data = json.loads(json_str)
+    except json.JSONDecodeError as e:
+        return {"code": code, "error": f"JSON 解析失败: {e}"}
+
+    if not data or not isinstance(data, dict):
+        return {"code": code, "error": "接口返回数据格式异常"}
+
+    return {
+        "code": data.get("fundcode", code),
+        "name": data.get("name", ""),
+        "dwjz": data.get("dwjz", ""),
+        "gsz": data.get("gsz", ""),
+        "gszzl": data.get("gszzl", ""),
+        "gztime": data.get("gztime", ""),
+        "jzrq": data.get("jzrq", ""),
+    }

@@ -34,7 +34,14 @@
 
         <template x-if="funds.length > 0">
             <section>
-                <h2>自选基金列表</h2>
+                <div class="list-header">
+                    <h2>自选基金列表</h2>
+                    <button class="outline small" @click="refreshValuation()" :aria-busy="refreshing">
+                        <span x-show="!refreshing">🔄 刷新估值</span>
+                        <span x-show="refreshing">刷新中...</span>
+                    </button>
+                </div>
+                <p x-show="valTime" class="val-time" x-text="'估值更新时间: ' + valTime"></p>
                 <div class="fund-grid">
                     <template x-for="fund in funds" :key="fund.fund_code">
                         <article class="fund-card">
@@ -48,6 +55,14 @@
                                 <div class="stat">
                                     <small>单位净值</small>
                                     <strong x-text="fund.nav?.toFixed(4) || '--'"></strong>
+                                </div>
+                                <div class="stat">
+                                    <small>实时估值</small>
+                                    <strong x-text="fund.valuation?.gsz || '--'" class="val-gsz"></strong>
+                                </div>
+                                <div class="stat">
+                                    <small>实时涨幅</small>
+                                    <strong :class="valuationCls(fund.valuation?.gszzl)" x-text="fmtValPct(fund.valuation?.gszzl)"></strong>
                                 </div>
                                 <div class="stat">
                                     <small>日涨跌</small>

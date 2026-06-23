@@ -4,7 +4,7 @@
 }
 
 .container {
-    max-width: 960px;
+    max-width: 1200px;
     padding-top: 1.5rem;
 }
 
@@ -63,7 +63,7 @@ header hgroup {
 /* 基金统计 */
 .fund-stats {
     display: grid;
-    grid-template-columns: repeat(7, 1fr);
+    grid-template-columns: repeat(9, 1fr);
     gap: 0.75rem;
     margin-bottom: 0.75rem;
 }
@@ -73,6 +73,7 @@ header hgroup {
 }
 
 .stat small {
+    font-size: 0.65rem;
     font-size: 0.7rem;
     display: block;
     color: var(--pico-muted-color);
@@ -80,6 +81,7 @@ header hgroup {
 }
 
 .stat strong {
+    font-size: 0.82rem;
     font-size: 0.95rem;
     font-size: 1.15rem;
 }
@@ -173,4 +175,27 @@ header hgroup {
         flex-direction: column;
         gap: 0.5rem;
     }
+}
+
+/* 列表头部 */
+.list-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 1rem;
+}
+
+.list-header h2 {
+    margin-bottom: 0;
+}
+
+.val-time {
+    color: var(--pico-muted-color);
+    font-size: 0.85rem;
+    margin-bottom: 0.5rem;
+    text-align: right;
+}
+
+.val-gsz {
+    color: var(--pico-primary);
 }
