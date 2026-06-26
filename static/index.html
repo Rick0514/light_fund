@@ -81,7 +81,7 @@
                                     <strong x-text="'¥' + fmtNum(fund.current_value || 0)"></strong>
                                 </div>
                                 <div class="stat">
-                                    <small>距上次加仓</small>
+                                    <small>距上次操作</small>
                                     <strong :class="(fund.nav_change_since_last || 0) >= 0 ? 'up' : 'down'" x-text="fmtNavChange(fund.nav_change_since_last)"></strong>
                                 </div>
                                 <div class="stat">
@@ -93,18 +93,19 @@
                             <footer>
                                 <button class="outline small"
                                     @click="showPosCode === fund.fund_code ? (showPosCode = null) : openPositions(fund.fund_code)"
-                                    x-text="showPosCode === fund.fund_code ? '收起加仓 ▲' : '加仓信息 ▼'">
+                                    x-text="showPosCode === fund.fund_code ? '收起操作 ▲' : '操作记录 ▼'">
                                 </button>
                             </footer>
 
                             <template x-if="showPosCode === fund.fund_code">
                                 <div class="positions-panel">
-                                    <h4>加仓记录</h4>
+                                    <h4>操作记录</h4>
                                     <template x-if="posData && posData.positions.length > 0">
                                         <table class="positions-table">
                                             <thead>
                                                 <tr>
                                                     <th>日期</th>
+                                                    <th>类型</th>
                                                     <th>金额</th>
                                                     <th>净值</th>
                                                     <th>份额</th>
@@ -116,6 +117,10 @@
                                                 <template x-for="p in posData.positions" :key="p.id">
                                                     <tr>
                                                         <td x-text="p.date"></td>
+                                                        <td>
+                                                            <span class="op-badge" :class="p.type === 'sell' ? 'sell' : 'buy'"
+                                                                x-text="p.type === 'sell' ? '减仓' : '加仓'"></span>
+                                                        </td>
                                                         <td x-text="'¥' + fmtNum(p.amount)"></td>
                                                         <td x-text="p.nav?.toFixed(4)"></td>
                                                         <td x-text="p.shares?.toFixed(2)"></td>
@@ -129,7 +134,7 @@
                                         </table>
                                     </template>
                                     <template x-if="!posData || posData.positions.length === 0">
-                                        <p class="muted">暂无加仓记录</p>
+                                        <p class="muted">暂无操作记录</p>
                                     </template>
 
                                     <template x-if="posData">
@@ -141,12 +146,27 @@
                                         </div>
                                     </template>
 
-                                    <h4>添加加仓</h4>
+                                    <h4>新增操作</h4>
                                     <form @submit.prevent="addPosition(fund.fund_code)" class="position-form">
+                                        <div class="type-toggle">
+                                            <label>
+                                                <input type="radio" name="op_type" value="buy" x-model="opType" checked>
+                                                <span class="toggle-label buy-label">加仓</span>
+                                            </label>
+                                            <label>
+                                                <input type="radio" name="op_type" value="sell" x-model="opType">
+                                                <span class="toggle-label sell-label">减仓</span>
+                                            </label>
+                                        </div>
                                         <input type="date" x-model="posDate" required>
-                                        <input type="number" x-model="posAmount" placeholder="金额（元）" step="0.01" min="0.01" required>
+                                        <input type="number" x-show="posMode === 'amount'" x-model="posAmount" placeholder="金额（元）" step="0.01" min="0.01">
+                                        <select x-model="posMode" class="pos-mode-select">
+                                            <option value="amount">按金额</option>
+                                            <option value="shares">按份额</option>
+                                        </select>
+                                        <input type="number" x-show="posMode === 'shares'" x-model="posShares" placeholder="份额" step="0.01" min="0.01">
                                         <input type="text" x-model="posNote" placeholder="备注（可选）">
-                                        <button type="submit" :aria-busy="posLoading">添加</button>
+                                        <button type="submit" :aria-busy="posLoading">提交</button>
                                     </form>
                                 </div>
                             </template>

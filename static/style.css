@@ -128,13 +128,6 @@ header hgroup {
     font-size: 0.9rem;
 }
 
-/* 添加加仓表单 */
-.position-form {
-    margin-top: 0.75rem;
-    display: grid;
-    grid-template-columns: 1fr 1fr 1fr auto;
-    gap: 0.5rem;
-    align-items: end;
 }
 
 .position-form input,
@@ -168,6 +161,7 @@ header hgroup {
     }
 
     .position-form {
+    flex-wrap: wrap;
         grid-template-columns: 1fr 1fr;
     }
 
@@ -198,4 +192,86 @@ header hgroup {
 
 .val-gsz {
     color: var(--pico-primary);
+}
+
+/* 操作类型徽章 */
+.op-badge {
+    font-size: 0.75rem;
+    padding: 0.1rem 0.4rem;
+    border-radius: 4px;
+    font-weight: 600;
+}
+
+.op-badge.buy {
+    background: #fde8e8;
+    color: #c53030;
+}
+
+.op-badge.sell {
+    background: #e6f5e6;
+    color: #276749;
+}
+
+/* 类型切换 */
+.type-toggle {
+    display: flex;
+    gap: 0.5rem;
+    margin-bottom: 0.5rem;
+}
+
+.type-toggle label {
+    display: flex;
+    align-items: center;
+    gap: 0.3rem;
+    cursor: pointer;
+}
+
+.type-toggle input[type="radio"] {
+    display: none;
+}
+
+.toggle-label {
+    font-size: 0.85rem;
+    padding: 0.3rem 0.8rem;
+    border-radius: 4px;
+    border: 1px solid var(--pico-muted-border-color);
+    transition: all 0.2s;
+}
+
+.type-toggle input:checked + .toggle-label.buy-label {
+    background: #c53030;
+    color: #fff;
+    border-color: #c53030;
+}
+
+.type-toggle input:checked + .toggle-label.sell-label {
+    background: #276749;
+    color: #fff;
+    border-color: #276749;
+}
+
+/* 操作表单 */
+.position-form {
+    margin-top: 0.75rem;
+    display: grid;
+    grid-template-columns: auto 1fr 1fr auto;
+    gap: 0.5rem;
+    align-items: end;
+}
+
+.position-form .type-toggle {
+    grid-column: 1 / -1;
+    width: 100%;
+    margin-bottom: 0.25rem;
+}
+
+.position-form input,
+.position-form button {
+    margin-bottom: 0;
+}
+
+.pos-mode-select {
+    width: auto;
+    min-width: 90px;
+    margin-bottom: 0;
 }

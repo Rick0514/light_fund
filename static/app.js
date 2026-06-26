@@ -7,8 +7,11 @@ window.fundApp = () => ({
     successMsg: "",
     showPosCode: null,
     posData: null,
+    opType: "buy",
     posDate: new Date().toISOString().split("T")[0],
+    posMode: "amount",
     posAmount: "",
+    posShares: "",
     posNote: "",
     posLoading: false,
     refreshing: false,
@@ -25,13 +28,13 @@ window.fundApp = () => ({
             if (resp.ok) {
                 const currentValuations = Object.fromEntries(
                     this.funds
-                        .filter((fund) => fund.valuation)
-                        .map((fund) => [fund.fund_code, fund.valuation])
+                        .filter((f) => f.valuation)
+                        .map((f) => [f.fund_code, f.valuation])
                 );
                 const funds = await resp.json();
-                this.funds = funds.map((fund) => ({
-                    ...fund,
-                    valuation: fund.valuation || currentValuations[fund.fund_code] || null,
+                this.funds = funds.map((f) => ({
+                    ...f,
+                    valuation: f.valuation || currentValuations[f.fund_code] || null,
                 }));
             }
         } catch (e) {
@@ -101,7 +104,7 @@ window.fundApp = () => ({
             if (resp.ok) {
                 this.showPosCode = null;
                 this.posData = null;
-                await this.loadFunds();
+                this.funds = this.funds.filter((f) => f.fund_code !== code);
             }
         } catch (e) {
             console.error("删除失败", e);
@@ -111,28 +114,17 @@ window.fundApp = () => ({
     async openPositions(code) {
         this.showPosCode = code;
         this.posData = null;
+        this.opType = "buy";
+        this.posMode = "amount";
         this.posAmount = "";
+        this.posShares = "";
         this.posNote = "";
-        await this.refreshPositions(code);
+        await this._refreshPositions(code);
     },
 
-    async refreshPositions(code) {
-        try {
-            const resp = await fetch(`/api/funds/${code}/positions`);
-            if (resp.ok) {
-                const data = await resp.json();
-                this.posData = data;
-                this.updateFundFromPositionData(data);
-            }
-        } catch (e) {
-            console.error("加载加仓记录失败", e);
-        }
-    },
-
-    updateFundFromPositionData(data) {
-        const fund = this.funds.find((item) => item.fund_code === data.fund_code);
+    _updateFundFromPositionData(data) {
+        const fund = this.funds.find((f) => f.fund_code === data.fund_code);
         if (!fund) return;
-
         fund.positions = data.positions || [];
         fund.nav = data.nav;
         fund.nav_date = data.nav_date;
@@ -141,38 +133,63 @@ window.fundApp = () => ({
         fund.current_value = data.current_value || 0;
         fund.profit = data.profit || 0;
         fund.profit_pct = fund.total_invested > 0 ? (fund.profit / fund.total_invested) * 100 : 0;
-
-        const positions = fund.positions;
-        if (positions.length && data.nav) {
-            const lastPos = [...positions].sort((a, b) => a.date.localeCompare(b.date)).at(-1);
-            fund.last_nav = lastPos?.nav || null;
-            fund.nav_change_since_last = fund.last_nav
-                ? ((data.nav - fund.last_nav) / fund.last_nav) * 100
-                : null;
+        const pos = fund.positions;
+        if (pos.length && data.nav) {
+            const last = [...pos].sort((a, b) => a.date.localeCompare(b.date)).at(-1);
+            fund.last_nav = last?.nav || null;
+            fund.nav_change_since_last = fund.last_nav ? ((data.nav - fund.last_nav) / fund.last_nav) * 100 : null;
         } else {
             fund.last_nav = null;
             fund.nav_change_since_last = null;
         }
     },
 
+    async _refreshPositions(code) {
+        try {
+            const resp = await fetch(`/api/funds/${code}/positions`);
+            if (resp.ok) {
+                const data = await resp.json();
+                this.posData = data;
+                this._updateFundFromPositionData(data);
+            }
+        } catch (e) {
+            console.error("加载操作记录失败", e);
+        }
+    },
+
     async addPosition(code) {
-        const amount = parseFloat(this.posAmount);
-        if (!this.posDate || isNaN(amount) || amount <= 0) return;
+        const mode = this.posMode;
+        const amountInput = parseFloat(this.posAmount) || 0;
+        const sharesInput = parseFloat(this.posShares) || 0;
+
+        if (!this.posDate) return;
+        if (mode === "amount" && amountInput <= 0) return;
+        if (mode === "shares" && sharesInput <= 0) return;
+
         this.posLoading = true;
         this.error = "";
         try {
             const resp = await fetch(`/api/funds/${code}/positions`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ date: this.posDate, amount: amount, note: this.posNote }),
+                body: JSON.stringify({
+                    date: this.posDate,
+                    amount: mode === "amount" ? amountInput : 0,
+                    shares: mode === "shares" ? sharesInput : 0,
+                    type: this.opType,
+                    note: this.posNote,
+                }),
             });
-            const data = await resp.json();
             if (resp.ok) {
                 this.posAmount = "";
+                this.posShares = "";
                 this.posNote = "";
-                await this.refreshPositions(code);
+                this.posMode = "amount";
+                this.opType = "buy";
+                await this._refreshPositions(code);
             } else {
-                this.error = data.error || "添加加仓失败";
+                const err = await resp.json();
+                this.error = err.error || "操作失败";
             }
         } catch (e) {
             this.error = "网络错误";
@@ -182,11 +199,11 @@ window.fundApp = () => ({
     },
 
     async deletePosition(code, pid) {
-        if (!confirm("确认删除该加仓记录？")) return;
+        if (!confirm("确认删除该操作记录？")) return;
         try {
             const resp = await fetch(`/api/funds/${code}/positions/${pid}`, { method: "DELETE" });
             if (resp.ok) {
-                await this.refreshPositions(code);
+                await this._refreshPositions(code);
             }
         } catch (e) {
             console.error("删除失败", e);

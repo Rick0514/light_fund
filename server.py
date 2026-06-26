@@ -4,7 +4,7 @@ import json
 import os
 import uuid
 from http.server import HTTPServer, BaseHTTPRequestHandler
-from urllib.parse import urlparse, parse_qs
+from urllib.parse import urlparse
 from pathlib import Path
 
 from fund_api import get_fund_info, get_fund_valuation
@@ -70,7 +70,7 @@ class FundHandler(BaseHTTPRequestHandler):
         self.end_headers()
 
     def do_GET(self):
-        path, parsed = self._parse_path()
+        path, _ = self._parse_path()
 
         if path == "" or path == "/":
             return self._send_file(STATIC_DIR / "index.html", "text/html; charset=utf-8")
@@ -81,7 +81,6 @@ class FundHandler(BaseHTTPRequestHandler):
 
         parts = path.split("/")
 
-        # GET /api/valuations - 批量刷新实时估值
         if path == "/api/valuations":
             data = load_data()
             result = {}
@@ -94,32 +93,35 @@ class FundHandler(BaseHTTPRequestHandler):
                     pass
             return self._send_json(result)
 
-        # GET /api/funds - 自选基金列表
         if path == "/api/funds":
             data = load_data()
             result = []
             for code, info in data["funds"].items():
                 fund_info = get_fund_info(code)
+                positions = info.get("positions", [])
                 entry = {
                     "fund_code": code,
                     "name": info.get("name", code),
                     "added_at": info.get("added_at", ""),
-                    "positions": info.get("positions", []),
+                    "positions": positions,
                 }
                 if fund_info:
                     entry["nav"] = fund_info["nav"]
                     entry["daily_return"] = fund_info["daily_return"]
                     entry["nav_date"] = fund_info["date"]
-                    total_invested = sum(p["amount"] for p in info.get("positions", []))
-                    total_shares = sum(p["shares"] for p in info.get("positions", []))
-                    entry["total_invested"] = round(total_invested, 2)
-                    entry["total_shares"] = round(total_shares, 4)
+                    buy_amount = sum(p["amount"] for p in positions if p.get("type") != "sell")
+                    sell_amount = sum(p["amount"] for p in positions if p.get("type") == "sell")
+                    buy_shares = sum(p["shares"] for p in positions if p.get("type") != "sell")
+                    sell_shares = sum(p["shares"] for p in positions if p.get("type") == "sell")
+                    total_invested = round(buy_amount - sell_amount, 2)
+                    total_shares = round(buy_shares - sell_shares, 4)
+                    entry["total_invested"] = total_invested
+                    entry["total_shares"] = total_shares
                     entry["current_value"] = round(total_shares * fund_info["nav"], 2)
                     entry["profit"] = round(entry["current_value"] - total_invested, 2)
                     entry["profit_pct"] = round(entry["profit"] / total_invested * 100, 2) if total_invested > 0 else 0
-                    positions_list = info.get("positions", [])
-                    if positions_list:
-                        last_pos = sorted(positions_list, key=lambda p: p["date"])[-1]
+                    if positions:
+                        last_pos = sorted(positions, key=lambda p: p["date"])[-1]
                         if last_pos.get("nav") and last_pos["nav"] > 0:
                             entry["last_nav"] = last_pos["nav"]
                             entry["nav_change_since_last"] = round((fund_info["nav"] - last_pos["nav"]) / last_pos["nav"] * 100, 2)
@@ -133,27 +135,29 @@ class FundHandler(BaseHTTPRequestHandler):
                 result.append(entry)
             return self._send_json(result)
 
-        # GET /api/funds/<code>/positions
         if len(parts) == 5 and parts[1] == "api" and parts[2] == "funds" and parts[4] == "positions":
             code = parts[3]
             data = load_data()
             if code not in data["funds"]:
                 return self._send_json({"error": "基金不存在"}, 404)
-            fund_data = data["funds"][code]
-            positions = fund_data.get("positions", [])
+            positions = data["funds"][code].get("positions", [])
             fund_info = get_fund_info(code)
             result = {
                 "fund_code": code,
-                "name": fund_data.get("name", code),
+                "name": data["funds"][code].get("name", code),
                 "positions": positions,
             }
             if fund_info:
-                total_invested = sum(p["amount"] for p in positions)
-                total_shares = sum(p["shares"] for p in positions)
+                buy_amount = sum(p["amount"] for p in positions if p.get("type") != "sell")
+                sell_amount = sum(p["amount"] for p in positions if p.get("type") == "sell")
+                buy_shares = sum(p["shares"] for p in positions if p.get("type") != "sell")
+                sell_shares = sum(p["shares"] for p in positions if p.get("type") == "sell")
+                total_invested = round(buy_amount - sell_amount, 2)
+                total_shares = round(buy_shares - sell_shares, 4)
                 result["nav"] = fund_info["nav"]
                 result["nav_date"] = fund_info["date"]
-                result["total_invested"] = round(total_invested, 2)
-                result["total_shares"] = round(total_shares, 4)
+                result["total_invested"] = total_invested
+                result["total_shares"] = total_shares
                 result["current_value"] = round(total_shares * fund_info["nav"], 2)
                 result["profit"] = round(result["current_value"] - total_invested, 2)
             return self._send_json(result)
@@ -193,20 +197,37 @@ class FundHandler(BaseHTTPRequestHandler):
             body = self._read_body()
             pos_date = body.get("date", "").strip()
             amount = body.get("amount", 0)
+            shares_input = body.get("shares", 0)
+            op_type = body.get("type", "buy")
             note = body.get("note", "").strip()
-            if not pos_date or amount <= 0:
-                return self._send_json({"error": "日期和金额不能为空"}, 400)
+
+            if amount <= 0 and shares_input <= 0:
+                return self._send_json({"error": "金额或份额不能为空"}, 400)
+            if not pos_date:
+                return self._send_json({"error": "日期不能为空"}, 400)
+            if op_type not in ("buy", "sell"):
+                return self._send_json({"error": "操作类型无效"}, 400)
+
             data = load_data()
             if code not in data["funds"]:
                 return self._send_json({"error": "基金不存在"}, 404)
+
             fund_info = get_fund_info(code, pos_date)
             if not fund_info:
                 return self._send_json({"error": f"无法获取 {code} 在 {pos_date} 的净值"}, 400)
+
             nav = fund_info["nav"]
-            shares = round(amount / nav, 4) if nav > 0 else 0
+
+            if shares_input > 0:
+                shares = round(shares_input, 4)
+                amount = round(shares * nav, 2)
+            else:
+                shares = round(amount / nav, 4) if nav > 0 else 0
+
             position = {
                 "id": uuid.uuid4().hex[:8],
                 "date": pos_date,
+                "type": op_type,
                 "amount": round(amount, 2),
                 "nav": nav,
                 "shares": shares,
