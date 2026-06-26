@@ -4,7 +4,7 @@ import json
 import os
 import uuid
 from http.server import HTTPServer, BaseHTTPRequestHandler
-from urllib.parse import urlparse
+from urllib.parse import urlparse, unquote
 from pathlib import Path
 
 from fund_api import get_fund_info, get_fund_valuation
@@ -18,7 +18,7 @@ def load_data() -> dict:
     if DATA_FILE.exists():
         with open(DATA_FILE, "r", encoding="utf-8") as f:
             return json.load(f)
-    return {"funds": {}}
+    return {"funds": {}, "tags": []}  # tags 全局标签列表
 
 
 def save_data(data: dict) -> None:
@@ -69,6 +69,8 @@ class FundHandler(BaseHTTPRequestHandler):
         self.send_header("Access-Control-Allow-Headers", "Content-Type")
         self.end_headers()
 
+    # ────────────────────────── GET ──────────────────────────
+
     def do_GET(self):
         path, _ = self._parse_path()
 
@@ -81,6 +83,12 @@ class FundHandler(BaseHTTPRequestHandler):
 
         parts = path.split("/")
 
+        # ─── 标签 ───
+        if path == "/api/tags":
+            data = load_data()
+            return self._send_json(data.get("tags", []))
+
+        # ─── 估值 ───
         if path == "/api/valuations":
             data = load_data()
             result = {}
@@ -93,16 +101,19 @@ class FundHandler(BaseHTTPRequestHandler):
                     pass
             return self._send_json(result)
 
+        # ─── 基金列表 ───
         if path == "/api/funds":
             data = load_data()
             result = []
             for code, info in data["funds"].items():
                 fund_info = get_fund_info(code)
                 positions = info.get("positions", [])
+                tags = info.get("tags", [])
                 entry = {
                     "fund_code": code,
                     "name": info.get("name", code),
                     "added_at": info.get("added_at", ""),
+                    "tags": tags,
                     "positions": positions,
                 }
                 if fund_info:
@@ -135,6 +146,7 @@ class FundHandler(BaseHTTPRequestHandler):
                 result.append(entry)
             return self._send_json(result)
 
+        # ─── 操作记录 ───
         if len(parts) == 5 and parts[1] == "api" and parts[2] == "funds" and parts[4] == "positions":
             code = parts[3]
             data = load_data()
@@ -145,6 +157,7 @@ class FundHandler(BaseHTTPRequestHandler):
             result = {
                 "fund_code": code,
                 "name": data["funds"][code].get("name", code),
+                "tags": data["funds"][code].get("tags", []),
                 "positions": positions,
             }
             if fund_info:
@@ -164,10 +177,13 @@ class FundHandler(BaseHTTPRequestHandler):
 
         self._send_json({"error": "Not Found"}, 404)
 
+    # ────────────────────────── POST ──────────────────────────
+
     def do_POST(self):
         path, _ = self._parse_path()
         parts = path.split("/")
 
+        # ─── 添加自选 ───
         if path == "/api/funds":
             body = self._read_body()
             fund_code = body.get("fund_code", "").strip()
@@ -182,6 +198,7 @@ class FundHandler(BaseHTTPRequestHandler):
             data["funds"][fund_code] = {
                 "name": fund_info["name"],
                 "added_at": fund_info["date"],
+                "tags": [],
                 "positions": [],
             }
             save_data(data)
@@ -192,6 +209,40 @@ class FundHandler(BaseHTTPRequestHandler):
                 "daily_return": fund_info["daily_return"],
             }, 201)
 
+        # ─── 新增标签 ───
+        if path == "/api/tags":
+            body = self._read_body()
+            tag_name = body.get("name", "").strip()
+            if not tag_name:
+                return self._send_json({"error": "标签名称不能为空"}, 400)
+            data = load_data()
+            if "tags" not in data:
+                data["tags"] = []
+            if tag_name in data["tags"]:
+                return self._send_json({"error": f"标签 '{tag_name}' 已存在"}, 400)
+            data["tags"].append(tag_name)
+            save_data(data)
+            return self._send_json({"name": tag_name}, 201)
+
+        # ─── 给基金加标签 ───
+        if len(parts) == 5 and parts[1] == "api" and parts[2] == "funds" and parts[4] == "tags":
+            code = parts[3]
+            body = self._read_body()
+            tag_name = body.get("name", "").strip()
+            if not tag_name:
+                return self._send_json({"error": "标签名称不能为空"}, 400)
+            data = load_data()
+            if code not in data["funds"]:
+                return self._send_json({"error": "基金不存在"}, 404)
+            if "tags" not in data["funds"][code]:
+                data["funds"][code]["tags"] = []
+            if tag_name in data["funds"][code]["tags"]:
+                return self._send_json({"error": f"该基金已有标签 '{tag_name}'"}, 400)
+            data["funds"][code]["tags"].append(tag_name)
+            save_data(data)
+            return self._send_json({"fund_code": code, "tag": tag_name}, 201)
+
+        # ─── 添加操作记录 ───
         if len(parts) == 5 and parts[1] == "api" and parts[2] == "funds" and parts[4] == "positions":
             code = parts[3]
             body = self._read_body()
@@ -217,7 +268,6 @@ class FundHandler(BaseHTTPRequestHandler):
                 return self._send_json({"error": f"无法获取 {code} 在 {pos_date} 的净值"}, 400)
 
             nav = fund_info["nav"]
-
             if shares_input > 0:
                 shares = round(shares_input, 4)
                 amount = round(shares * nav, 2)
@@ -239,10 +289,40 @@ class FundHandler(BaseHTTPRequestHandler):
 
         self._send_json({"error": "Not Found"}, 404)
 
+    # ───────────────────────── DELETE ──────────────────────────
+
     def do_DELETE(self):
         path, _ = self._parse_path()
         parts = path.split("/")
 
+        # ─── 删除标签 ───
+        if len(parts) == 4 and parts[1] == "api" and parts[2] == "tags":
+            tag_name = parts[3]
+            data = load_data()
+            if tag_name not in data.get("tags", []):
+                return self._send_json({"error": f"标签 '{tag_name}' 不存在"}, 404)
+            data["tags"].remove(tag_name)
+            # 同时清理所有基金上挂的这个标签
+            for info in data["funds"].values():
+                if "tags" in info and tag_name in info["tags"]:
+                    info["tags"].remove(tag_name)
+            save_data(data)
+            return self._send_json({"ok": True})
+
+        # ─── 删除基金上的某个标签 ───
+        if len(parts) == 6 and parts[1] == "api" and parts[2] == "funds" and parts[4] == "tags":
+            code, tag_name = parts[3], unquote(parts[5])
+            data = load_data()
+            if code not in data["funds"]:
+                return self._send_json({"error": "基金不存在"}, 404)
+            tags = data["funds"][code].get("tags", [])
+            if tag_name not in tags:
+                return self._send_json({"error": f"标签 '{tag_name}' 不存在于此基金"}, 404)
+            tags.remove(tag_name)
+            save_data(data)
+            return self._send_json({"ok": True})
+
+        # ─── 删除自选 ───
         if len(parts) == 4 and parts[1] == "api" and parts[2] == "funds":
             code = parts[3]
             data = load_data()
@@ -252,6 +332,7 @@ class FundHandler(BaseHTTPRequestHandler):
             save_data(data)
             return self._send_json({"ok": True})
 
+        # ─── 删除操作记录 ───
         if len(parts) == 6 and parts[1] == "api" and parts[2] == "funds" and parts[4] == "positions":
             code, pid = parts[3], parts[5]
             data = load_data()

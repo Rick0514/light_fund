@@ -32,6 +32,27 @@
             <template x-if="successMsg"><p class="success-msg" x-text="successMsg"></p></template>
         </section>
 
+        <!-- 标签管理 -->
+        <section class="tag-section" x-show="allTags.length > 0 || funds.length > 0">
+            <div class="tag-bar">
+                <span :class="{ active: activeTags.length === 0 }" class="tag-chip" @click="activeTags = []">全部</span>
+                <template x-for="t in allTags" :key="t">
+                    <span :class="{ active: activeTags.includes(t) }" class="tag-chip">
+                        <span class="tag-text" @click="toggleTag(t)" x-text="t"></span>
+                        <span class="tag-x" @click.stop="deleteTag(t)" title="删除标签" x-show="allTags.length > 1">×</span>
+                    </span>
+                </template>
+                <template x-if="showTagInput">
+                    <input type="text" x-model="newTagName" placeholder="标签名" size="8"
+                        @blur="commitTag()" @keydown.escape="showTagInput = false; newTagName = ''"
+                        @keydown.enter.prevent="commitTag()" />
+                </template>
+                <template x-if="!showTagInput">
+                    <span class="tag-chip add-tag" @click="showTagInput = true; $nextTick(() => $refs.tagInput?.focus())">+</span>
+                </template>
+            </div>
+        </section>
+
         <template x-if="funds.length > 0">
             <section>
                 <div class="list-header">
@@ -43,13 +64,33 @@
                 </div>
                 <p x-show="valTime" class="val-time" x-text="'估值更新时间: ' + valTime"></p>
                 <div class="fund-grid">
-                    <template x-for="fund in funds" :key="fund.fund_code">
+                    <template x-for="fund in filteredFunds" :key="fund.fund_code">
                         <article class="fund-card">
                             <header>
                                 <strong x-text="fund.fund_code"></strong>
                                 <span class="fund-name" x-text="fund.name"></span>
                                 <button class="outline secondary small delete-btn" @click="deleteFund(fund.fund_code)">删除</button>
                             </header>
+
+                            <!-- 标签 -->
+                            <div class="fund-tags">
+                                <template x-for="t in fund.tags" :key="t">
+                                    <span class="tag-chip small has-remove" @click="activeTags = [t]">
+                                        <span x-text="t"></span>
+                                        <span class="tag-remove" @click.stop="removeTagFromFund(fund.fund_code, t)">×</span>
+                                    </span>
+                                </template>
+                                <span class="tag-chip small add-tag" @click="showTagPicker === fund.fund_code ? (showTagPicker = null) : (showTagPicker = fund.fund_code)">+</span>
+
+                                <template x-if="showTagPicker === fund.fund_code">
+                                    <select x-model="pickedTag" @change="addTagToFund(fund.fund_code, pickedTag); showTagPicker = null" class="tag-picker" @click.stop @blur="showTagPicker = null">
+                                        <option value="">选择标签...</option>
+                                        <template x-for="t in availableTagsFor(fund)" :key="t">
+                                            <option :value="t" x-text="t"></option>
+                                        </template>
+                                    </select>
+                                </template>
+                            </div>
 
                             <div class="fund-stats">
                                 <div class="stat">
@@ -118,8 +159,7 @@
                                                     <tr>
                                                         <td x-text="p.date"></td>
                                                         <td>
-                                                            <span class="op-badge" :class="p.type === 'sell' ? 'sell' : 'buy'"
-                                                                x-text="p.type === 'sell' ? '减仓' : '加仓'"></span>
+                                                            <span class="op-badge" :class="p.type === 'sell' ? 'sell' : 'buy'" x-text="p.type === 'sell' ? '减仓' : '加仓'"></span>
                                                         </td>
                                                         <td x-text="'¥' + fmtNum(p.amount)"></td>
                                                         <td x-text="p.nav?.toFixed(4)"></td>
@@ -159,11 +199,11 @@
                                             </label>
                                         </div>
                                         <input type="date" x-model="posDate" required>
-                                        <input type="number" x-show="posMode === 'amount'" x-model="posAmount" placeholder="金额（元）" step="0.01" min="0.01">
                                         <select x-model="posMode" class="pos-mode-select">
                                             <option value="amount">按金额</option>
                                             <option value="shares">按份额</option>
                                         </select>
+                                        <input type="number" x-show="posMode === 'amount'" x-model="posAmount" placeholder="金额（元）" step="0.01" min="0.01">
                                         <input type="number" x-show="posMode === 'shares'" x-model="posShares" placeholder="份额" step="0.01" min="0.01">
                                         <input type="text" x-model="posNote" placeholder="备注（可选）">
                                         <button type="submit" :aria-busy="posLoading">提交</button>
